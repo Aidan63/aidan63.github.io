@@ -4,9 +4,9 @@ layout: post
 categories: haxe, flurry, game engine
 ---
 
-For the last few weeks, I’ve been rebuilding my game engine’s build tool after becoming increasingly frustrated at how inflexible the asset pipeline was as some of my projects started to grow or had unusual asset processing requirements. The build tool in its entirety could be split into two main parts. The asset pipeline, where assets are serialised into files called “parcels” which are loaded by the engine. And the code generator, which is responsible for creating haxe hxml files, invoking the haxe compiler, and auto running the game if everything was successful. This article focuses on the overhaul to the asset pipeline stage of this tool, which I've named `Igloo`. 
+For the last few weeks, I’ve been rebuilding my game engine’s build tool after becoming increasingly frustrated at how inflexible the asset pipeline was as some of my projects started to grow or had unusual asset processing requirements. The build tool in its entirety (named Igloo) could be split into two main parts. The asset pipeline, where assets are serialised into files called “parcels” which are loaded by the engine. And the code generator, which is responsible for creating haxe hxml files, invoking the haxe compiler, and auto running the game if everything was successful. This article focuses on the overhaul to the asset pipeline stage of this tool. 
 
-My engine was initially heavily inspired by the old luxe alpha and the general structure of the asset pipeline was taken from there. In the existing solution assets are defined in json files and then serialised into files called parcels. The json files use the format below.
+My engine was initially heavily inspired by the old luxe alpha and the general structure of the asset pipeline was taken from there. In the existing solution assets are defined in json files which are read by the build tool. The json files use the format below.
 
 ```json
 {
@@ -44,27 +44,27 @@ My engine was initially heavily inspired by the old luxe alpha and the general s
 
 As you can see there are a finite number of hard coded asset types. If the asset you want to include doesn’t fit into one of those six types, then you must bodge it to make it fit. 
 
-This usually means putting the asset in the “bytes” category and parsing it at game runtime. This isn’t great as often the assets are editor formats (e.g., tiled xml files, aseprite files, etc) which are large and slow to parse. Adding more types to the pipeline also isn’t ideal, especially in the case of generic map files such as tiled. The expected tile layers, object layers, etc in a map for one project might differ substantially from another, so with generic tiled support we’re back to doing a lot of the work at game runtime. 
+This usually means putting the asset in the “bytes” category and parsing it at game runtime. This isn’t great as often the assets are editor formats (e.g., tiled xml files, aseprite files, etc) which are large and slow to parse. Adding more types to the pipeline also isn’t ideal, especially in the case of more open ended editor formats such as tiled maps. The expected tile layers, object layers, masks, etc in a map for one project might differ substantially from another, so even with generic tiled support we’re still doing a lot of the work at game runtime. 
 
-The solution envisioned of was to have the pipeline be extensible by user written scripts. These “asset processors” would register themselves as wanting to operate on specific file types, read those editor formats at compile time, and write only the data we’re interested into the parcel. This would allow projects to serialise assets to fit their exact needs instead of trying to make one size fits all solutions. 
+The solution envisioned of was to have the pipeline be extendable by user written scripts. These “asset processors” would register themselves as wanting to operate on specific file types, read those editor formats at compile time, and write only the data we’re interested in into the parcel. This would allow projects to serialise assets to fit their exact needs instead of trying to make one size fits all solutions. 
 
-XNA / Monogame has a similar system, their content pipeline tool can be extended with C# dlls allowing users to write custom processors for any assets they require.
+Libgdx has support for user user resource loaders but they exist at runtime instead of compile time. XNA and Monogame have a similar system to the one I wanted to make, their content pipeline tool can be extended with C# dlls allowing users to write compile time processors for any assets they require.
 
 ## Potential Haxe Solutions
 
 The existing build tool was compiled as a Neko “run.n” file which was invoked through haxelib to build assets and code for a given project. Initially I investigated a plugin system where extra Neko module would be dynamically loaded, this seemed like it could work as Neko appears to support loading extra modules at runtime. 
 
-Ultimately, I decided against Neko as performance was also another area I wanted to improve. In the existing tool the more intensive parts of parcel generation (such as building texture atlases) was being passed off to pre-compiled HXCPP programs to get a good speed and to use existing native libraries. Even with some work being passed off to native executables the whole parcel generation was slower than I’d like. 
+Ultimately, I decided against Neko as performance was also another area I wanted to improve. In the existing tool the more intensive parts of parcel generation (such as building texture atlases) was being passed off to pre-compiled HXCPP programs to get a good speed and to use existing native libraries. Even with some work being passed off to native executables the whole parcel generation process was slower than I’d like. 
 
 Hashlink was another avenue I briefly explored before moving on, at the time of writing hashlink doesn’t appear to have any way to load extra code at runtime. 
 
-What I decided to go with was HXCPP with cppia scripting. Cppia is probably the least used haxe target with little documentation but seemed ideal for my needs. When you compile a haxe program with the cppia target you get a file with a byte code like contents, HXCPP programs can load these cppia scripts and execute them, or load and instantiate classes compiled within the script. 
+What I decided to go with was HXCPP with cppia scripting. Cppia is probably the least used haxe target and has little documentation (even by haxe standards!) but seemed ideal for my needs. When you compile a haxe program with the cppia target you get a file with bytecode like content, HXCPP programs can load these cppia scripts and execute their `main` function, or if they're compiled as a library (without a `main`) it can instantiate classes compiled within the script. 
 
-One of the interesting things about cppia scripts is when compiling them you can link them against an existing HXCPP program (assuming it was compiled with –D scriptable), this means if you reference classes which are compiled into the HXCPP host it won’t include them in the script. This allows you to put the performance intensive parts of the program into the HXCPP host allowing you to get the best of both worlds with regards to performance and access to native libraries and the flexibility of loading scripts at runtime. 
+One of the interesting things about cppia scripts is when compiling them you can link them against an existing HXCPP program (assuming it was compiled with –D scriptable), this means if you reference classes which are compiled into the HXCPP host it won’t include them in the script. This allows you to put the performance sensitive parts of the program into the HXCPP host and the compiled cppia scripts can call that code without knowing or caring if its stored in the script or host executable. 
 
 ## Overview of the New System
 
-The parcels and the assets to place in them are still defined in json files, but the specific types have been entirely removed. All source assets are defined in a json array. 
+The parcels and the assets are still defined in json files, but the specific types have been entirely removed. All source assets are defined in a json array. 
 
 ```json
 {
@@ -81,7 +81,7 @@ The parcels and the assets to place in them are still defined in json files, but
 }
 ```
 
-The projects main build file now allows you to specify haxe files which will be compiled into cppia scripts. The script must define a class which extends `igloo.processors.AssetProcessor<T>` which has the same name as the script file. The optional flags field in the json allows you to add extra haxe arguments for compiling the processor. 
+A projects build file now allows you to specify haxe files which will be compiled into cppia scripts. The script must define a class which extends `igloo.processors.AssetProcessor<T>` which has the same name as the script file. The optional flags field in the json allows you to add extra haxe arguments when compiling the processor. 
 
 ```json
 {
@@ -102,7 +102,7 @@ The projects main build file now allows you to specify haxe files which will be 
 }
 ```
 
-The `AssetProcessor` type has the following signature. 
+That `igloo.processors.AssetProcessor<T>` type has the following signature. 
 
 ```haxe
 class AssetProcessor<T>
@@ -121,9 +121,9 @@ The `ids` function returns an array of strings for file extensions which the pro
 
 The `pack` function takes in those source assets defined in the json files and returns 1...N resource requests. This allows each source asset to produce multiple output resources for the parcel, each request can also specify if it wants to be packed into a texture atlas. This means any processor can gain all the benefit of build time texture packing instead of it being reserved for special built-in types or being done at game runtime. 
 
-Each of these generated resource requests are resolved by the build tool (i.e., packing them in an atlas if they requested in) then the passed into the `write` function of the same processor. The output object of the `write` function is where you send your custom data into the parcel stream. 
+Each of these generated resource requests are resolved by the build tool (i.e., packing them in an atlas if they requested in) and then the passed into the `write` function of the same processor. The output object of the `write` function is where you send your custom data into the parcel stream. 
 
-The `AssetProcessor` type is generic, the purpose of this is to allow data to be passed between the pack and write functions for a particular asset and its generated resource requests. Each `AssetProcessor` is only created once and is shared between multiple assets. 
+The `AssetProcessor` type is generic, the purpose of this is to allow data to be passed between the pack and write functions for a particular source asset and its generated resource requests. Each `AssetProcessor` is only created once and is used for multiple source assets and resource responses, so it would be difficult to add fields to the processor class to hold data for a specific source asset.  
 
 ```haxe
 import haxe.Exception;
@@ -185,7 +185,7 @@ A complete processor is shown above. This processor operates on image files, for
 
 With the build tool being a native program the Neko program invoked through haxelib is now responsible for bootstrapping that program for projects. Calling “haxelib run flurry install” will compile the build tool into a “.flurry” folder in the calling directory and create a PowerShell or bash script for easily invoking it. 
 
-![Bootstrapped Directory](assets/2021-07-24/bootstrapped.png)
+![Bootstrapped Directory](https://raw.githubusercontent.com/Aidan63/aidan63.github.io/master/_posts/assets/2021-07-24/bootstrapped.png)
 
 By using the `dll_export` path you can control the location of the metadata file the compiler will produce which contains information on all classes compiled into the cppia host. The path of this file along with the source code path of the build tool is baked into the executable as it is read back at runtime and passed to the haxe compiler when compiling asset processor scripts. When compiling cppia scripts the `dll_import` define can be used to point to a host metadata file to avoid including classes which already exist in the host. 
 
@@ -199,7 +199,7 @@ The scripts are compiled by invoking haxe and setting a handful of code paths (t
 
 Each compiled cppia script is cached and a metadata file is generated containing the timestamp when it was built along with all the command line flags used to compiled said script. This is used on subsequent runs to potentially skip this compilation stage. If a scripts modification date is less than the timestamp in the metadata file and the command line arguments match, then the script has not been modified since it was compiled so does not need compiling again. 
 
-Using `cpp.cppia.Module.fromData` these compiled cppia scripts are then loaded into individual modules, using the `resolveClass` function we can get a `Class<T>` for each script processor and construct an instance of it using `Type.createInstance`. This step is why the class which extends `igloo.processor.AssetProcessor` must have the same name as the script and not be in any package, the file name is used for the `resolveClass` call. 
+Using `cpp.cppia.Module.fromData` these compiled cppia scripts are then loaded into individual modules, using the `resolveClass` function we can get a `Class<T>` for each processor class and construct an instance of it using `Type.createInstance`. This step is why the class which extends `igloo.processor.AssetProcessor` must have the same name as the script and not be in any package, the file name is used for the `resolveClass` call. 
 
 > For anyone using cppia modules make sure you call the “boot” function on them! I spent an entire afternoon trying to figure out why all statics in my cppia scripts were null, turns out the boot function is responsible for setting their initial values.
 
@@ -213,23 +213,23 @@ All these created `AssetProcessor` instances are added into a map where they key
 
 Once all the resource requests have been generated by the `pack` calls to processors these requests are then transformed into resource responses. Each response is given a project unique integer ID (increments from 0), the ID of the asset processor used generate that request is stored as well. 
 
-If the request stated that it contains data which wants to be placed into the texture atlas, then a rectangle large enough to fit the data is packed into the atlas using the [binpacking](https://lib.haxe.org/p/bin-packing/) haxelib library. The position of the rectangle within the atlas is also stored in the response. 
+If the request stated that it contains data which wants to be placed into the texture atlas, then a rectangle large enough to fit the data is packed into the atlas using the [bin-packing](https://lib.haxe.org/p/bin-packing/) haxelib library. The position of the rectangle within the atlas is also stored in the response. 
 
 ### Atlas Page Generation
 
-The atlas may have multiple “pages” to it, each page will be generated as a separate texture. When it fails to pack a rectangle into the current page a new page is created to fit that rectangle. Once all requests have been resolved no more rectangles will be inserted into the atlas so the pages can be generated. For each page a `haxe.io.Bytes` object is allocated and all data which was packed within is copied into its appropriate position by checking against the requests packed rectangle. 
+The atlas may have multiple “pages” to it, each page will be generated as a separate texture. When the bin-packing library fails to insert a rectangle into the current page a new page is created to fit that rectangle. Once all requests have been resolved no more rectangles will be inserted into the atlas so the textures can be generated. For each page a `haxe.io.Bytes` object is allocated and all data which was packed within is copied into its appropriate position by checking against the requests packed rectangle. 
 
-This is another area which benifits from concurrency. Each page is unique and by throwing the page generation functions onto a threadpool we get a nice speedup for atlases which have many pages (we could go one step further and throw all individual frames onto a threadpool, but I haven't profiled that yet). 
+This is another area which benifits from concurrency. Each page is unique and by throwing the page generation functions onto a threadpool we get a nice speedup for atlases which have many pages (we could go one step further and throw all individual packed rectangles onto a threadpool, but I haven't profiled that yet to see if its worth it). 
 
-![Page Debugger](assets/2021-07-24/page_debugger.png)
+![Page Debugger](https://raw.githubusercontent.com/Aidan63/aidan63.github.io/master/_posts/assets/2021-07-24/page_debugger.png)
 
 > The above is a very basic WPF program to display all pages contained within a parcel. The screenshot shows the result of loose images, pre packed texture atlases, and a dynamically generated atlas all packed into a single page.
 
 ### Writing Responses
 
-With all pages output into the parcel stream, all the created resource responses are passed into the `write` function of the processor which originally generated them. The unique ID given, the generic data `T` from the `pack` function, and the location of the packed rectangle (if originally requested) are also passed into this function. 
+With all pages output into the parcel stream, all the resource responses are passed into the `write` function of the processor which originally generated them. The generic data `T` from the `pack` function and the location of the packed rectangle (if originally requested) are also passed into this function. 
 
-In the parcel stream the `RESR` magic bytes are written along with the string id of the processor used just before calling the `write` function. This allows the engines parcel reader to pass off reading to the appropriate loader when coming across the magic bytes in the stream. 
+In the parcel stream the `RESR` magic bytes are written along with the string id of the processor used just before calling the `write` function. This allows the engines parcel reader to pass off reading to the appropriate loader when coming across a resource in the stream. 
 
 ## Caching
 
@@ -303,7 +303,7 @@ The metadata file contains data on all pages and resources (along with the asset
 
 ### Resource Readers
 
-In my engine resource readers are responsible for loading the resources contained within the parcel stream. The base reader class is very simple and share a fair bit in common with the processors classes. 
+In my engine resource readers are responsible for loading the resources contained within the parcel stream. The base reader class is very simple and shares a fair bit in common with the processor classes. 
 
 ```haxe
 package uk.aidanlee.flurry.api.resources;
@@ -319,7 +319,7 @@ class ResourceReader
 }
 ```
 
-The `ids` function allows the loader to indicate what sort of resources it wants to load. These should match against the `ids` returned by the processors function. The read function should then read back the data output in the processors `write` function. For my engine I require all resources to extends the `Resource` type so that’s what this function returns for my loading system. 
+The `ids` function allows the loader to indicate what sort of resources it wants to load. These should match against the `ids` returned by the processors `ids` function. The read function should then read back the data output in the processors `write` function. For my engine I require all resources to extends the `Resource` type so that’s what this function returns for my loading system. 
 
 ```haxe
 package uk.aidanlee.flurry.api.resources.loaders;
@@ -354,7 +354,7 @@ class PageFrameLoader extends ResourceReader
 }
 ```
 
-> This is the corresponding resource reader to the `ImageResourceProcessor` processor shown towards the beginning of this post. The array returned `ids` also has a "atlas" string as this reader is also used to the resources output by a libgdx atlas processor.
+> This is the corresponding resource reader to the `ImageResourceProcessor` processor shown towards the beginning of this post. The array returned `ids` also has a "atlas" string as this reader is also used to read the resources output by a libgdx atlas processor.
 
 ```haxe
 import uk.aidanlee.flurry.Flurry;
@@ -380,9 +380,9 @@ class Project extends Flurry
 
 ### Parcel Auto Completion
 
-The advantage of a project wide unique ID which increments from zero and attempting to keep it tightly packed is that the resources can then be stored in a flat array. The metadata files described above are also re-used for this purpose. At build time all metadata files are read, and the largest ID is found and used to allocate a vector of that size.
+The advantage of a project wide unique ID which increments from zero and attempting to keep it tightly packed is that the resources can then be stored in a flat array with minimal memory waste. The metadata files described above are also re-used for this purpose. At build time all metadata files are read, and the largest ID is found and used to allocate a vector of that size.
 
-Each parcel has a class generated with the parcel name as the class name and static inline variables for all the resources in that parcel with the unique ID as the value. 
+Each parcel in the project also has a class generated with the parcel name as the class name and static inline variables for all the resources in that parcel with the unique ID as the value. 
 
 ```json
 {
@@ -413,7 +413,7 @@ class Preload
 }
 ```
 
-These parcel classes can then be used for access resources from the engine. Below is a sample project for displaying three images on the screen.
+These parcel classes can then be used for access resources in the game engine. Below is a minimal project for displaying three images on the screen.
 
 ```haxe
 import uk.aidanlee.flurry.Flurry;
@@ -481,4 +481,4 @@ Following partial packing it should be possible to implement hot re-loading for 
 
 Hopefully this article was interesting to some people and offers some ideas on cppia usage for others projects.
 
-If you want to see the asset processors code in full it currently lives in the following branch https://github.com/flurry-engine/flurry/tree/features/igloo and can be found under `src/igloo`. Note that this is my own engine created mainly for my own use / experimentation, so don't expect any sort of documentation, getting started guide, or really anything other than code comments.
+If you want to see the code in full it currently lives in the following branch https://github.com/flurry-engine/flurry/tree/features/igloo and can be found under `src/igloo`. Note that this is my own engine created mainly for my own use / experimentation, so don't expect any sort of documentation, getting started guide, or really anything other than code comments.
