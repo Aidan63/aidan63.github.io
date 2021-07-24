@@ -138,42 +138,42 @@ import igloo.processors.ResourceResponse;
 
 class ImageResourceProcessor extends AssetProcessor<Unit>
 {
-	override public function ids()
-	{
-		return [ 'png', 'jpg', 'jpeg', 'tga', 'bmp' ];
-	}
+    override public function ids()
+    {
+        return [ 'png', 'jpg', 'jpeg', 'tga', 'bmp' ];
+    }
 
-	override public function pack(_ctx : ParcelContext, _asset : Asset)
-	{
-		final absPath = _ctx.assetDirectory.join(_asset.path);
-		
-		return new ResourceRequest(Unit.value, PackImage(_asset.id, absPath));
-	}
+    override public function pack(_ctx : ParcelContext, _asset : Asset)
+    {
+        final absPath = _ctx.assetDirectory.join(_asset.path);
 
-	override public function write(_ctx : ParcelContext, _writer : Output, _data : Unit, _response : ResourceResponse)
-	{
-		switch _response
-		{
-			case Packed(frame):
+        return new ResourceRequest(Unit.value, PackImage(_asset.id, absPath));
+    }
+
+    override public function write(_ctx : ParcelContext, _writer : Output, _data : Unit, _response : ResourceResponse)
+    {
+        switch _response
+        {
+            case Packed(frame):
                 // `id` and `pageID` are project unique integers given to each resource and page.
-				_writer.writeInt32(frame.id);
-				_writer.writeInt32(frame.pageID);
-		
-				// Write pixel location of the frame in the page.
-				_writer.writeInt32(frame.x);
-				_writer.writeInt32(frame.y);
-				_writer.writeInt32(frame.w);
-				_writer.writeInt32(frame.h);
-		
+                _writer.writeInt32(frame.id);
+                _writer.writeInt32(frame.pageID);
+
+                // Write pixel location of the frame in the page.
+                _writer.writeInt32(frame.x);
+                _writer.writeInt32(frame.y);
+                _writer.writeInt32(frame.w);
+                _writer.writeInt32(frame.h);
+
                 // Write UV information for the packed frame.
-				_writer.writeFloat(frame.u1);
-				_writer.writeFloat(frame.v1);
-				_writer.writeFloat(frame.u2);
-				_writer.writeFloat(frame.v2);
-			case NotPacked(_, _):
-				throw new Exception('ImageResourceProcessor can only operate on packed responses');
-		}
-	}
+                _writer.writeFloat(frame.u1);
+                _writer.writeFloat(frame.v1);
+                _writer.writeFloat(frame.u2);
+                _writer.writeFloat(frame.v2);
+            case NotPacked(_, _):
+                throw new Exception('ImageResourceProcessor can only operate on packed responses');
+        }
+    }
 }
 ```
 
