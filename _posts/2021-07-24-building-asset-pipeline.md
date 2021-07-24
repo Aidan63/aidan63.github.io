@@ -306,11 +306,6 @@ The metadata file contains data on all pages and resources (along with the asset
 In my engine resource readers are responsible for loading the resources contained within the parcel stream. The base reader class is very simple and shares a fair bit in common with the processor classes. 
 
 ```haxe
-package uk.aidanlee.flurry.api.resources;
-
-import haxe.io.Input;
-import haxe.exceptions.NotImplementedException;
-
 class ResourceReader
 {
     public function ids() : Array<String>;
