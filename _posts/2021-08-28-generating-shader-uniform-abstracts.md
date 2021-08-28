@@ -21,7 +21,7 @@ spirv-cross.exe input_vert.spv --stage --vert --extry main --reflect --output ve
 spirv-cross.exe input_frag.spv --stage --frag --extry main --reflect --output frag-reflection.json
 ```
 
-If we take the following vertex shader and look at the produced reflection data, we can see that spirv-cross has done most of the work for us!
+If we take the following fragment shader and look at the produced reflection data, we can see that spirv-cross has done most of the work for us!
 
 ![shader and reflection data](https://raw.githubusercontent.com/Aidan63/aidan63.github.io/master/_posts/assets/2021-08-28/shader-and-reflection.png)
 
@@ -74,13 +74,14 @@ public extern inline overload function write(_offset : Int, _v : Vec3)
     return _v;
 }
 
-public extern inline overload function write(_offset : Int, _v : Mat3)
+public extern inline overload function write(_offset : Int, _v : Mat4)
 {
-    final data = (cast _v : Mat3.Mat3Data);
+    final data = (cast _v : Mat4.Mat4Data);
 
-    write(_offset + 0, data.c0);
-    write(_offset + 4, data.c1);
-    write(_offset + 8, data.c2);
+    write(_offset +  0, data.c0);
+    write(_offset +  4, data.c1);
+    write(_offset +  8, data.c2);
+    write(_offset + 12, data.c3);
 
     return _v;
 }
