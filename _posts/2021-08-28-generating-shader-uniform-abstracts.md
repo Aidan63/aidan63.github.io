@@ -6,7 +6,7 @@ categories: haxe, flurry, game engine, shaders, glsl
 
 Uniform interface blocks (cbuffers in hlsl) have unintuitive alignment rules where block members can't cross 16-byte boundaries and each array element must be aligned to 16 bytes.
 
-![std140 alignment example](assets/2021-08-28/std140-alignment.png)
+![std140 alignment example](https://raw.githubusercontent.com/Aidan63/aidan63.github.io/master/_posts/assets/2021-08-28/std140-alignment.png)
 
 Manually packing data according to these rules is error prone as it's easy to forget about some of the finer points of these rules (layout rules covers 2 pages in the OpenGL spec!) and adding, removing, or reorganising members can affect the alignment of following members.
 
@@ -23,7 +23,7 @@ spirv-cross.exe input_frag.spv --stage --frag --extry main --reflect --output fr
 
 If we take the following vertex shader and look at the produced reflection data, we can see that spirv-cross has done most of the work for us!
 
-![shader and reflection data](assets/2021-08-28/shader-and-reflection.png)
+![shader and reflection data](https://raw.githubusercontent.com/Aidan63/aidan63.github.io/master/_posts/assets/2021-08-28/shader-and-reflection.png)
 
 The reflection data lists all the buffer objects and its members, it also lists the total size of the buffer, offset of all members, and in the case of array types, the stride of each element in the array. From this reflection data I pull out the relevant parts and save it so it can be read by an initialisation macro.
 
@@ -182,7 +182,7 @@ I’m using the [vector-math](https://github.com/haxiomic/vector-math/) library 
 
 ## Conclusion
 
-![shader and reflection data](assets/2021-08-28/from-to.png)
+![shader and reflection data](https://raw.githubusercontent.com/Aidan63/aidan63.github.io/master/_posts/assets/2021-08-28/from-to.png)
 
 All the above stages (shader compilation, reflection, initialisation macro calls, caching) are handled automatically by my build tool so any changes made to shaders are automatically reflected in code. Its been really nice not having to deal with the hassle of uniform alignment and being able to get abstracts with properties which mirror the actual shader interface.
 
